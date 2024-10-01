@@ -30,39 +30,58 @@ TRAVEL_TIMES = {
 
 routes = {
     "Route_E1_E3_east": {
+        "start": "E1",
+        "end": "E3",
         "stops": ["S1_e", "S4_e", "S6_e"],
         "roads": ["R1", "R5", "R8", "R13"]
     },
     "Route_E1_E3_west": {
-        "stops": ["S1_w", "S4_w", "S6_w"],
-        "roads": ["R1", "R5", "R8", "R13"]
+        "start": "E3",
+        "end": "E1",
+        "stops": ["S6_w", "S4_w", "S1_w"],
+        "roads": ["R13", "R8", "R5", "R1"]
     },
     "Route_E1_E4_east": {
+        "start": "E1",
+        "end": "E4",
         "stops": ["S2_e", "S5_e", "S7_e"],
         "roads": ["R2", "R7", "R11", "R15"]
     },
     "Route_E1_E4_west": {
-        "stops": ["S2_w", "S5_w", "S7_w"],
-        "roads": ["R2", "R7", "R11", "R15"]
+        "start": "E4",
+        "end": "E1",
+        "stops": ["S7_w", "S5_w", "S2_w"],
+        "roads": ["R15", "R11", "R7", "R2"]
     },
     "Route_E2_E3_east": {
+        "start": "E2",
+        "end": "E3",
         "stops": ["S3_e", "S7_e"],
         "roads": ["R4", "R12", "R14"]
     },
     "Route_E2_E3_west": {
-        "stops": ["S3_w", "S7_w"],
-        "roads": ["R4", "R12", "R14"]
+        "start": "E3",
+        "end": "E2",
+        "stops": ["S7_w", "S3_w"],
+        "roads": ["R14", "R12", "R4"]
     },
     "Route_E2_E4_east": {
+        "start": "E2",
+        "end": "E4",
         "stops": ["S3_e", "S7_e"],
         "roads": ["R4", "R12", "R15"]
     },
     "Route_E2_E4_west": {
-        "stops": ["S3_w", "S7_w"],
-        "roads": ["R4", "R12", "R15"]
+        "start": "E4",
+        "end": "E2",
+        "stops": ["S7_w", "S3_w"],
+        "roads": ["R15", "R12", "R4"]
     }
 }
 
+
+
+#Passenger entity
 class Passenger:
     def __init__(self, env, passenger_id, arrival_time, destination):
         self.env = env
@@ -72,19 +91,19 @@ class Passenger:
         self.boarding_time = None
         self.total_travel_time = None
 
-# Passenger generator
+#Passenger generator entity
 def passenger_generator(env, bus_stop_queues, passenger_list):
     passenger_id = 0
     while True:
-        stop = random.choice(list(bus_stop_queues.keys()))
+        stop = random.choice(list(bus_stop_queues.keys())) 
         arrival_time = env.now
-        destination = random.choice([s for s in bus_stop_queues.keys() if s != stop])  # Ensure destination is different
+        destination = random.choice([s for s in bus_stop_queues.keys() if s != stop])  # makes sure destination is different than current stop
 
-        # Create new passenger entity
+        #creates new passenger
         passenger = Passenger(env, passenger_id, arrival_time, destination)
         passenger_id += 1
 
-        # Add passenger to bus stop queue
+        #add passenger to bus stop queue
         bus_stop_queues[stop].append(passenger)
         passenger_list.append(passenger)
 
@@ -92,9 +111,9 @@ def passenger_generator(env, bus_stop_queues, passenger_list):
 
         yield env.timeout(random.expovariate(ARRIVAL_RATES[stop]))
 
-# Bus entity with dynamic route selection
+#Bus entity 
 def bus(env, bus_stop_queues, initial_route_name, utilization_record):
-    current_capacity = 0
+    occ = 0
     current_route_name = initial_route_name
     current_route = routes[current_route_name]
     passengers_on_board = []
@@ -107,34 +126,35 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
             stop = route_stops[i]
             print(f"Bus arriving at {stop} at time {env.now}")
 
-            # Drop off passengers at their destination stop
+            #drop off passengers at their destination
             passengers_to_leave = [p for p in passengers_on_board if p.destination == stop]
             for passenger in passengers_to_leave:
                 passengers_on_board.remove(passenger)
-                current_capacity -= 1
-                passenger.total_travel_time = env.now - passenger.boarding_time
+                occ -= 1
+                passenger.total_travel_time = env.now - passenger.boarding_time - passenger.arrival_time
                 print(f"Passenger {passenger.passenger_id} left the bus at {stop} at time {env.now}")
 
-            # Pick up passengers waiting at the stop
+            #print statement to see how many are at stop 'i' at time env.now
             num_waiting = len(bus_stop_queues[stop])
             if num_waiting > 0:
                 print(f"{num_waiting} passengers waiting at {stop} at time {env.now}")
 
-            num_boarding = min(num_waiting, CAPACITY - current_capacity)
-            for _ in range(num_boarding):
-                passenger = bus_stop_queues[stop].pop(0)
+            #let people board the bus first
+            num_boarding = min(num_waiting, CAPACITY - occ)  #this is effectively the bin from the activity diagram
+            for boarder in range(num_boarding):
+                passenger = bus_stop_queues[stop].pop(0) #FIFO queuing principle here :)
                 passenger.boarding_time = env.now
                 passengers_on_board.append(passenger)
-                current_capacity += 1
+                occ += 1
                 print(f"Passenger {passenger.passenger_id} boarded the bus at {stop} at time {env.now}")
 
-            print(f"Bus capacity now: {current_capacity}/{CAPACITY}")
+            print(f"Bus capacity now: {occ}/{CAPACITY}")
 
-            # Record utilization at each stop and road segment
-            utilization = current_capacity / CAPACITY  # Calculate utilization as current capacity divided by max capacity
-            utilization_record.append(utilization)
+            #utilization calculations
+            utilization = occ / CAPACITY  #a way less fancy way to write U_k compared to my lab 1 report.
+            utilization_record.append(utilization) #for graphing and comparison to results of task ii.a.4
 
-            # Travel to the next stop
+            #travel to the next stop
             if i < len(route_roads):
                 travel_time = TRAVEL_TIMES[route_roads[i]]
                 yield env.timeout(travel_time)
