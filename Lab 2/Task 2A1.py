@@ -12,11 +12,6 @@ y_samples = [random.expovariate(lambda_value) for sumthin in range(num_samples)]
 x_sorted = sorted(x_samples)
 y_sorted = sorted(y_samples)
 
-print(x_sorted[469])
-print(y_sorted[469])
-
-
-
 #Some fancy statistics to look at the correlation 
 correlation = np.corrcoef(x_sorted, y_sorted)[0, 1]
 print(f"Correlation: {correlation}")

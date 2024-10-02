@@ -28,7 +28,7 @@ TRAVEL_TIMES = {
     "R13": 6, "R14": 2, "R15": 3
 }
 
-# Updated routes dictionary with start and end keys
+#Routes from Lab 1
 routes = {
     "Route_E1_E3_east": {
         "start": "E1",
@@ -80,7 +80,7 @@ routes = {
     }
 }
 
-# Passenger generator entity for each bus stop independently
+#Passenger generator entity
 def passenger_generator(env, bus_stop_queues):
     for stop in bus_stop_queues.keys():
         env.process(generate_passengers_at_stop(env, bus_stop_queues, stop))
@@ -91,12 +91,12 @@ def generate_passengers_at_stop(env, bus_stop_queues, stop):
         interarrival_time = random.expovariate(ARRIVAL_RATES[stop])
         yield env.timeout(interarrival_time)
 
-        # Record arrival time of passenger
+        #Record arrival time of passenger
         arrival_time = env.now
         bus_stop_queues[stop].append(arrival_time)
         print(f"Passenger arrived at {stop} at time {env.now}")
 
-# Bus entity with updated route handling
+#Bus entity
 def bus(env, bus_stop_queues, initial_route_name, utilization_record):
     occ = 0
     current_route_name = initial_route_name
@@ -106,57 +106,66 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
         route_stops = current_route["stops"]
         route_roads = current_route["roads"]
 
-        for i in range(len(route_stops)):
-            stop = route_stops[i]
-            print(f"Bus arriving at {stop} at time {env.now}")
+        for i in range(len(route_roads)):
+            #Travel time for the road segment leading up to the next stop
+            travel_time = TRAVEL_TIMES[route_roads[i]]
+            yield env.timeout(travel_time)
+            
+            if i < len(route_stops):
+                stop = route_stops[i]
+                print(f"Bus arriving at {stop} at time {env.now}")
 
-            # Drop off passengers
-            if occ > 0:
-                num_leaving = sum([1 for _ in range(occ) if random.uniform(0, 1) <= PROB_LEAVE])
-                occ -= num_leaving
-                print(f"{num_leaving} passengers left the bus at {stop} at time {env.now}")
+                #Drop off passengers
+                if occ > 0:
+                    num_leaving = sum([1 for _ in range(occ) if random.uniform(0, 1) <= PROB_LEAVE])
+                    occ -= num_leaving
+                    print(f"{num_leaving} passengers left the bus at {stop} at time {env.now}")
 
-            # Pick up passengers
-            num_waiting = len(bus_stop_queues[stop])
-            num_boarding = min(num_waiting, CAPACITY - occ)
-            for _ in range(num_boarding):
-                bus_stop_queues[stop].pop(0)
+                #Pick up passengers
+                num_waiting = len(bus_stop_queues[stop])
+                num_boarding = min(num_waiting, CAPACITY - occ)
+                for _ in range(num_boarding):
+                    bus_stop_queues[stop].pop(0) #doesn't really matter which to pop, the activity diagram doesn't say anything else than just to remove them. 
 
-            occ += num_boarding
-            print(f"{num_boarding} passengers boarded the bus at {stop} at time {env.now}")
-            print(f"Bus capacity now: {occ}/{CAPACITY}")
+                occ += num_boarding
+                print(f"{num_boarding} passengers boarded the bus at {stop} at time {env.now}")
+                print(f"Bus capacity now: {occ}/{CAPACITY}")
 
-            # Travel to the next stop
-            if i < len(route_roads):
-                travel_time = TRAVEL_TIMES[route_roads[i]]
-                yield env.timeout(travel_time)
+                #Record utilization after completing the route
+                utilization = occ / CAPACITY  #Calculate utilization as current capacity divided by max capacity
+                utilization_record.append(utilization)
 
-        # Record utilization after completing the route
-        utilization = occ / CAPACITY  # Calculate utilization as current capacity divided by max capacity
-        utilization_record.append(utilization)
-
+        
+        """"""""""""""""""""""
+        Route switching logic 
+        """""""""""""""""""""""
         # Determine the next route dynamically based on the current route's end
         current_end = current_route["end"]
-
-        # Find a new route that starts where the current route ends, and prioritize routes with most waiting passengers
-        next_route_name = None
         most_waiting = 0
+        next_route_name = None
 
-        for route_name, route_data in routes.items():
-            waiting = 0
-            for stop in route_data["stops"]:
-                waiting += len(bus_stop_queues[stop])
+        # Find all possible routes that start from the current end stop
+        possible_routes = [
+            route_name for route_name, route_data in routes.items() if route_data["start"] == current_end
+        ]
 
-            if waiting > most_waiting:
-                most_waiting = waiting
+        # Iterate over all possible routes and find the one with the most passengers waiting at all stops
+        for route_name in possible_routes:
+            total_waiting = sum(len(bus_stop_queues[stop]) for stop in routes[route_name]["stops"])  #Calculate total waiting passengers at all stops on the route
+            
+            if total_waiting > most_waiting:
+                most_waiting = total_waiting
                 next_route_name = route_name
 
+        # Update the current route to the one with the most waiting passengers
         if next_route_name:
             current_route_name = next_route_name
             current_route = routes[current_route_name]
-            print(f"Switching to a new route: {current_route_name} at time {env.now}")
+            print(f"Bus switching to a new route: {current_route_name} at time {env.now}")
         else:
             print(f"No connecting route found from {current_end}. Continuing with the current route.")
+
+
 
 # Running the simulation function
 def run_simulation(nb_values, num_runs):
@@ -190,12 +199,11 @@ def run_simulation(nb_values, num_runs):
 
     return average_utilizations, standard_errors
 
-# Run the simulation and plot results
+#Run the simulation and plot results
 nb_values = [5, 7, 10, 15]
 num_runs = 15
 average_utilizations, standard_errors = run_simulation(nb_values, num_runs)
 
-# Plot results
 plt.figure(figsize=(10, 6))
 plt.errorbar(nb_values, average_utilizations, yerr=standard_errors, fmt='o-', capsize=5, label='Average Utilization')
 plt.xlabel('Number of Buses ($n_b$)')

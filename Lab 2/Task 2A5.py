@@ -131,7 +131,7 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
                 print(f"Bus arriving at {stop} at time {env.now}")
 
                 # Drop off passengers at their destination stop
-                passengers_to_leave = [p for p in passengers_on_board if p.destination == stop]
+                passengers_to_leave = [p for p in passengers_on_board if p.destination == stop] #assuming random.uniform(0,1) <= PROB_LEAVE is not necessary since this is my own model, which is destination based.
                 for passenger in passengers_to_leave:
                     passengers_on_board.remove(passenger)
                     occ -= 1
@@ -154,17 +154,30 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
                 utilization = occ / CAPACITY
                 utilization_record.append(utilization)
 
+        """"""""""""""""""""""
+        Route switching logic 
+        """""""""""""""""""""""
         # Determine the next route dynamically based on the current route's end
         current_end = current_route["end"]
 
-        # Find all possible routes that start where the current route ends
+        most_waiting = 0
+        next_route_name = None
+
+        # Find all possible routes that start from the current end stop
         possible_routes = [
             route_name for route_name, route_data in routes.items() if route_data["start"] == current_end
         ]
 
-        # Choose one of the possible routes, if available
-        if possible_routes:
-            next_route_name = random.choice(possible_routes)
+        # Iterate over all possible routes and find the one with the most passengers waiting at all stops
+        for route_name in possible_routes:
+            total_waiting = sum(len(bus_stop_queues[stop]) for stop in routes[route_name]["stops"])  #Calculate total waiting passengers at all stops on the route
+            
+            if total_waiting > most_waiting:
+                most_waiting = total_waiting
+                next_route_name = route_name
+
+        # Update the current route to the one with the most waiting passengers
+        if next_route_name:
             current_route_name = next_route_name
             current_route = routes[current_route_name]
             print(f"Bus switching to a new route: {current_route_name} at time {env.now}")
@@ -181,7 +194,7 @@ def run_simulation(nb_values, num_runs):
     for n_b in nb_values:
         utilization_records = []
 
-        for _ in range(num_runs):
+        for run in range(num_runs):
             env = simpy.Environment()
             bus_stop_queues = {stop: [] for route in routes.values() for stop in route["stops"]}
             passenger_list = []
