@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 # Parameters
 CAPACITY = 20  # Capacity of the bus from Table 3
-PROB_LEAVE = 0.3  # Probability a passenger leaves at a bus stop
+PROB_LEAVE = 5  # Probability a passenger leaves at a bus stop
 SIMULATION_TIME = 100  # Total simulation time
 
 # Passenger arrival rates from Table 2
@@ -91,7 +91,7 @@ def passenger_generator(env, bus_stop_queues):
 
 # Bus entity with updated route handling
 def bus(env, bus_stop_queues, initial_route_name, utilization_record):
-    current_capacity = 0
+    occ = 0
     current_route_name = initial_route_name
     current_route = routes[current_route_name]
 
@@ -104,37 +104,50 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
             print(f"Bus arriving at {stop} at time {env.now}")
 
             # Drop off passengers
-            if current_capacity > 0:
-                num_leaving = sum([1 for _ in range(current_capacity) if random.uniform(0, 1) < PROB_LEAVE])
-                current_capacity -= num_leaving
+            if occ > 0:
+                num_leaving = sum([1 for something in range(occ) if random.uniform(0, 1) <= PROB_LEAVE])
+                occ -= num_leaving
                 print(f"{num_leaving} passengers left the bus at {stop} at time {env.now}")
 
             # Pick up passengers
             num_waiting = len(bus_stop_queues[stop])
-            num_boarding = min(num_waiting, CAPACITY - current_capacity)
+            num_boarding = min(num_waiting, CAPACITY - occ)
             for _ in range(num_boarding):
                 bus_stop_queues[stop].pop(0)
 
-            current_capacity += num_boarding
+            occ += num_boarding
             print(f"{num_boarding} passengers boarded the bus at {stop} at time {env.now}")
-            print(f"Bus capacity now: {current_capacity}/{CAPACITY}")
+            print(f"Bus capacity now: {occ}/{CAPACITY}")
 
             # Travel to the next stop
             if i < len(route_roads):
                 travel_time = TRAVEL_TIMES[route_roads[i]]
-                utilization = current_capacity / CAPACITY  # Calculate utilization as current capacity divided by max capacity
-                utilization_record.append(utilization)
                 yield env.timeout(travel_time)
+
+            utilization = occ / CAPACITY  # Calculate utilization as current capacity divided by max capacity
+            utilization_record.append(utilization)
 
         # Determine the next route dynamically based on the current route's end
         current_end = current_route["end"]
 
         # Find a new route that starts where the current route ends
         next_route_name = None
+        most_waiting = 0
+
         for route_name, route_data in routes.items():
-            if route_data["start"] == current_end:
+            waiting = 0
+            for stop in route_data["stops"]:
+                waiting += len(bus_stop_queues[stop])
+    
+            if waiting > most_waiting:
+                most_waiting = waiting
                 next_route_name = route_name
-                break
+    
+        
+        # for route_name, route_data in routes.items():
+        #     if route_data["start"] == current_end:
+        #         next_route_name = route_name
+        #         break
 
         if next_route_name:
             current_route_name = next_route_name
@@ -151,7 +164,7 @@ def run_simulation(nb_values, num_runs):
     for n_b in nb_values:
         utilization_records = []
 
-        for _ in range(num_runs):
+        for run in range(num_runs):
             env = simpy.Environment()
             bus_stop_queues = {stop: [] for route in routes.values() for stop in route["stops"]}
 
