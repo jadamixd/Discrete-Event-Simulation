@@ -150,9 +150,6 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="
             if next_route_name:
                 current_route_name = next_route_name
                 current_route = routes[current_route_name]
-                print(f"Bus switching to a new route: {current_route_name} at time {env.now}")
-            else:
-                print(f"No connecting route found from {current_end}. Continuing with the current route.")
 
         elif strategy == "random":
             # Random route switching
@@ -162,9 +159,6 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="
             if possible_routes:
                 current_route_name = random.choice(possible_routes)
                 current_route = routes[current_route_name]
-                print(f"Bus randomly switching to a new route: {current_route_name} at time {env.now}")
-            else:
-                print(f"No connecting route found from {current_end}. Continuing with the current route.")
 
 # Running the simulation function
 def run_simulation(nb_values, num_runs, strategy):
