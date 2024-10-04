@@ -85,7 +85,7 @@ def passenger_generator(env, bus_stop_queues):
     for stop in bus_stop_queues.keys():
         env.process(generate_passengers_at_stop(env, bus_stop_queues, stop))
 
-# Helper function to generate passengers at a specific bus stop
+#Helper function to generate passengers at a specific bus stop
 def generate_passengers_at_stop(env, bus_stop_queues, stop):
     while True:
         interarrival_time = random.expovariate(ARRIVAL_RATES[stop])

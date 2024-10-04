@@ -28,6 +28,7 @@ TRAVEL_TIMES = {
     "R13": 6, "R14": 2, "R15": 3
 }
 
+#Routes from lab 1
 routes = {
     "Route_E1_E3_east": {
         "start": "E1",
@@ -79,12 +80,12 @@ routes = {
     }
 }
 
-# Passenger generator entity
+#Passenger generator entity
 def passenger_generator(env, bus_stop_queues):
     for stop in bus_stop_queues.keys():
         env.process(generate_passengers_at_stop(env, bus_stop_queues, stop))
 
-# Helper function to generate passengers at a specific bus stop
+#Helper function to generate passengers at a specific bus stop
 def generate_passengers_at_stop(env, bus_stop_queues, stop):
     while True:
         interarrival_time = random.expovariate(ARRIVAL_RATES[stop])
@@ -93,7 +94,7 @@ def generate_passengers_at_stop(env, bus_stop_queues, stop):
         bus_stop_queues[stop].append(arrival_time)
         print(f"Passenger arrived at {stop} at time {env.now}")
 
-# Bus entity with two different route switching strategies
+#Bus entity with two different route switching strategies
 def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="demand_based"):
     occ = 0
     current_route_name = initial_route_name
@@ -111,13 +112,13 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="
                 stop = route_stops[i]
                 print(f"Bus arriving at {stop} at time {env.now}")
 
-                # Drop off passengers
+                #Drop off passengers
                 if occ > 0:
                     num_leaving = sum([1 for _ in range(occ) if random.uniform(0, 1) <= PROB_LEAVE])
                     occ -= num_leaving
                     print(f"{num_leaving} passengers left the bus at {stop} at time {env.now}")
 
-                # Pick up passengers
+                #Pick up passengers
                 num_waiting = len(bus_stop_queues[stop])
                 num_boarding = min(num_waiting, CAPACITY - occ)
                 for _ in range(num_boarding):
@@ -127,15 +128,15 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="
                 print(f"{num_boarding} passengers boarded the bus at {stop} at time {env.now}")
                 print(f"Bus capacity now: {occ}/{CAPACITY}")
 
-                # Record utilization
+                #Record utilization
                 utilization = occ / CAPACITY
                 utilization_record.append(utilization)
 
-        # Route switching logic based on strategy
+        #Route switching logic based on strategy
         current_end = current_route["end"]
 
         if strategy == "demand_based":
-            # Demand-based route switching (choose route with most waiting passengers)
+            #Demand-based route switching (choose route with most waiting passengers)
             most_waiting = 0
             next_route_name = None
             possible_routes = [
@@ -152,7 +153,7 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="
                 current_route = routes[current_route_name]
 
         elif strategy == "random":
-            # Random route switching
+            #Random route switching
             possible_routes = [
                 route_name for route_name, route_data in routes.items() if route_data["start"] == current_end
             ]
@@ -160,7 +161,7 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="
                 current_route_name = random.choice(possible_routes)
                 current_route = routes[current_route_name]
 
-# Running the simulation function
+#Running the simulation function
 def run_simulation(nb_values, num_runs, strategy):
     average_utilizations = []
     standard_errors = []
@@ -190,15 +191,15 @@ def run_simulation(nb_values, num_runs, strategy):
 
     return average_utilizations, standard_errors
 
-# Run simulations for both strategies
+#Run simulations for both strategies
 nb_values = [5, 7, 10, 15]
 num_runs = 15
 
-# Demand-based strategy
+#Demand-based strategy
 avg_util_demand, std_err_demand = run_simulation(nb_values, num_runs, strategy="demand_based")
 plt.errorbar(nb_values, avg_util_demand, yerr=std_err_demand, fmt='o-', capsize=5, label='Demand-Based Utilization')
 
-# Random strategy
+#Random strategy
 avg_util_random, std_err_random = run_simulation(nb_values, num_runs, strategy="random")
 plt.errorbar(nb_values, avg_util_random, yerr=std_err_random, fmt='o-', capsize=5, label='Random Utilization')
 

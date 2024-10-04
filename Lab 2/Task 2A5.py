@@ -3,12 +3,11 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
-# Parameters
-CAPACITY = 20  # Capacity of the bus from Table 3
-#PROB_LEAVE = 0.3  # Probability a passenger leaves at a bus stop, not used in this version
-SIMULATION_TIME = 100  # Increased total simulation time
+#Parameters
+CAPACITY = 20  #Capacity of the bus from Table 3
+SIMULATION_TIME = 100  #Increased total simulation time
 
-# Passenger arrival rates from Table 2
+#Passenger arrival rates from Table 2
 ARRIVAL_RATES = {
     "S1_e": 0.3, "S1_w": 0.6,
     "S2_e": 0.1, "S2_w": 0.1,
@@ -19,7 +18,7 @@ ARRIVAL_RATES = {
     "S7_e": 0.6, "S7_w": 0.4
 }
 
-# Travel times from Table 1 (in minutes)
+#Travel times from Table 1 (in minutes)
 TRAVEL_TIMES = {
     "R1": 3, "R2": 7, "R3": 6,
     "R4": 1, "R5": 4, "R6": 3,
@@ -28,6 +27,7 @@ TRAVEL_TIMES = {
     "R13": 6, "R14": 2, "R15": 3
 }
 
+#Routes from Lab 1
 routes = {
     "Route_E1_E3_east": {
         "start": "E1",
@@ -79,7 +79,7 @@ routes = {
     }
 }
 
-# Passenger entity
+#Passenger entity
 class Passenger:
     def __init__(self, env, passenger_id, arrival_time, destination):
         self.env = env
@@ -89,7 +89,7 @@ class Passenger:
         self.boarding_time = None
         self.total_travel_time = None
 
-# Passenger generator entity
+#Passenger generator entity
 def passenger_generator(env, stop, bus_stop_queues, passenger_list):
     passenger_id = 0
     while True:
@@ -108,7 +108,7 @@ def passenger_generator(env, stop, bus_stop_queues, passenger_list):
 
         print(f"Passenger {passenger.passenger_id} arrived at {stop} at time {env.now}")
 
-# Bus entity
+#Bus entity
 def bus(env, bus_stop_queues, initial_route_name, utilization_record):
     occ = 0
     current_route_name = initial_route_name
@@ -119,18 +119,18 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
         route_stops = current_route["stops"]
         route_roads = current_route["roads"]
 
-        # Iterate over the roads and stops
+        #Iterate over the roads and stops
         for i in range(len(route_roads)):
-            # Travel time for the road segment leading up to the next stop
+            #Travel time for the road segment leading up to the next stop
             travel_time = TRAVEL_TIMES[route_roads[i]]
             yield env.timeout(travel_time)
             
-            # Stop operations if there is a corresponding stop for the current road
+            #Stop operations if there is a corresponding stop for the current road
             if i < len(route_stops):
                 stop = route_stops[i]
                 print(f"Bus arriving at {stop} at time {env.now}")
 
-                # Drop off passengers at their destination stop
+                #Drop off passengers at their destination stop
                 passengers_to_leave = [p for p in passengers_on_board if p.destination == stop] #assuming random.uniform(0,1) <= PROB_LEAVE is not necessary since this is my own model, which is destination based.
                 for passenger in passengers_to_leave:
                     passengers_on_board.remove(passenger)
@@ -138,11 +138,11 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
                     passenger.total_travel_time = env.now - passenger.boarding_time
                     print(f"Passenger {passenger.passenger_id} left the bus at {stop} at time {env.now}")
 
-                # Pick up passengers waiting at the stop
+                #Pick up passengers waiting at the stop
                 num_waiting = len(bus_stop_queues[stop])
                 num_boarding = min(num_waiting, CAPACITY - occ)
                 for _ in range(num_boarding):
-                    passenger = bus_stop_queues[stop].pop(0)
+                    passenger = bus_stop_queues[stop].pop(0) #FIFO queue here 
                     passenger.boarding_time = env.now
                     passengers_on_board.append(passenger)
                     occ += 1
@@ -150,25 +150,25 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
 
                 print(f"Bus capacity now: {occ}/{CAPACITY}")
 
-                # Utilization calculations
+                #Utilization calculations
                 utilization = occ / CAPACITY
                 utilization_record.append(utilization)
 
         """"""""""""""""""""""
         Route switching logic 
         """""""""""""""""""""""
-        # Determine the next route dynamically based on the current route's end
+        #Determine the next route dynamically based on the current route's end
         current_end = current_route["end"]
 
         most_waiting = 0
         next_route_name = None
 
-        # Find all possible routes that start from the current end stop
+        #Find all possible routes that start from the current end stop
         possible_routes = [
             route_name for route_name, route_data in routes.items() if route_data["start"] == current_end
         ]
 
-        # Iterate over all possible routes and find the one with the most passengers waiting at all stops
+        #Iterate over all possible routes and find the one with the most passengers waiting at all stops
         for route_name in possible_routes:
             total_waiting = sum(len(bus_stop_queues[stop]) for stop in routes[route_name]["stops"])  #Calculate total waiting passengers at all stops on the route
             
@@ -176,7 +176,7 @@ def bus(env, bus_stop_queues, initial_route_name, utilization_record):
                 most_waiting = total_waiting
                 next_route_name = route_name
 
-        # Update the current route to the one with the most waiting passengers
+        #Update the current route to the one with the most waiting passengers
         if next_route_name:
             current_route_name = next_route_name
             current_route = routes[current_route_name]
