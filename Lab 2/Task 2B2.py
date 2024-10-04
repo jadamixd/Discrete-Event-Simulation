@@ -3,12 +3,12 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
-# Parameters
-CAPACITY = 20  # Capacity of the bus from Table 3
-PROB_LEAVE = 0.3  # Probability a passenger leaves at a bus stop
-SIMULATION_TIME = 100  # Total simulation time
+#Parameters
+CAPACITY = 20  #Capacity of the bus
+PROB_LEAVE = 0.3 #Probability a passenger leaves at a bus stop
+SIMULATION_TIME = 100  #Simulation time
 
-# Passenger arrival rates from Table 2
+#Arrival rates for each bus stop
 ARRIVAL_RATES = {
     "S1_e": 0.3, "S1_w": 0.6,
     "S2_e": 0.1, "S2_w": 0.1,
@@ -19,7 +19,7 @@ ARRIVAL_RATES = {
     "S7_e": 0.6, "S7_w": 0.4
 }
 
-# Travel times from Table 1 (in minutes)
+#Travel times for each road segment
 TRAVEL_TIMES = {
     "R1": 3, "R2": 7, "R3": 6,
     "R4": 1, "R5": 4, "R6": 3,
@@ -28,7 +28,7 @@ TRAVEL_TIMES = {
     "R13": 6, "R14": 2, "R15": 3
 }
 
-#Routes from lab 1
+#Routes from Lab 1
 routes = {
     "Route_E1_E3_east": {
         "start": "E1",
@@ -80,132 +80,178 @@ routes = {
     }
 }
 
-#Passenger generator entity
-def passenger_generator(env, bus_stop_queues):
-    for stop in bus_stop_queues.keys():
-        env.process(generate_passengers_at_stop(env, bus_stop_queues, stop))
+#Passenger entity
+class Passenger:
+    def __init__(self, env, passenger_id, arrival_time, destination):
+        self.env = env
+        self.passenger_id = passenger_id
+        self.arrival_time = arrival_time
+        self.destination = destination
+        self.boarding_time = None
+        self.total_travel_time = None
 
-#Helper function to generate passengers at a specific bus stop
-def generate_passengers_at_stop(env, bus_stop_queues, stop):
+#Passenger generator entity
+def passenger_generator(env, stop, bus_stop_queues, passenger_list):
+    passenger_id = 0
     while True:
         interarrival_time = random.expovariate(ARRIVAL_RATES[stop])
-        yield env.timeout(interarrival_time)
-        arrival_time = env.now
-        bus_stop_queues[stop].append(arrival_time)
-        print(f"Passenger arrived at {stop} at time {env.now}")
+        yield env.timeout(interarrival_time)  #Wait until next passenger arrives
 
-#Bus entity with two different route switching strategies
-def bus(env, bus_stop_queues, initial_route_name, utilization_record, strategy="demand_based"):
+        #Create a new passenger
+        arrival_time = env.now
+        destination = random.choice([s for s in bus_stop_queues.keys() if s != stop])  #Ensure the destination is different from the current stop
+        passenger = Passenger(env, passenger_id, arrival_time, destination)
+        passenger_id += 1
+
+        #Add passenger to the bus stop queue
+        bus_stop_queues[stop].append(passenger)
+        passenger_list.append(passenger)
+
+#Bus entity
+def bus(env, bus_stop_queues, initial_route_name, utilization_record, travel_times, strategy):
     occ = 0
     current_route_name = initial_route_name
     current_route = routes[current_route_name]
+    passengers_on_board = []
 
     while True:
         route_stops = current_route["stops"]
         route_roads = current_route["roads"]
 
+        #Iterate over the roads and stops
         for i in range(len(route_roads)):
+            #Travel time for the road segment leading up to the next stop
             travel_time = TRAVEL_TIMES[route_roads[i]]
             yield env.timeout(travel_time)
-
+            
+            #Stop operations if there is a corresponding stop for the current road
             if i < len(route_stops):
                 stop = route_stops[i]
-                print(f"Bus arriving at {stop} at time {env.now}")
 
-                #Drop off passengers
-                if occ > 0:
-                    num_leaving = sum([1 for _ in range(occ) if random.uniform(0, 1) <= PROB_LEAVE])
-                    occ -= num_leaving
-                    print(f"{num_leaving} passengers left the bus at {stop} at time {env.now}")
+                #Drop off passengers at their destination stop
+                passengers_to_leave = [p for p in passengers_on_board if random.uniform(0, 1) <= PROB_LEAVE]
+                for passenger in passengers_to_leave:
+                    passengers_on_board.remove(passenger)
+                    occ -= 1
+                    passenger.total_travel_time = env.now - passenger.boarding_time
+                    travel_times.append(passenger.total_travel_time)
 
-                #Pick up passengers
+                #Pick up passengers waiting at the stop
                 num_waiting = len(bus_stop_queues[stop])
                 num_boarding = min(num_waiting, CAPACITY - occ)
                 for _ in range(num_boarding):
-                    bus_stop_queues[stop].pop(0)
+                    passenger = bus_stop_queues[stop].pop(0)
+                    passenger.boarding_time = env.now
+                    passengers_on_board.append(passenger)
+                    occ += 1
 
-                occ += num_boarding
-                print(f"{num_boarding} passengers boarded the bus at {stop} at time {env.now}")
-                print(f"Bus capacity now: {occ}/{CAPACITY}")
-
-                #Record utilization
+                #Utilization calculations
                 utilization = occ / CAPACITY
                 utilization_record.append(utilization)
 
-        #Route switching logic based on strategy
+        """"""""""""""""""""""
+        Route switching logic
+        """""""""""""""""""""""
+        #Determine the next route dynamically based on the current route's end
         current_end = current_route["end"]
 
-        if strategy == "demand_based":
-            #Demand-based route switching (choose route with most waiting passengers)
+        if strategy == "demand":
+            #Demand-based route selection
             most_waiting = 0
             next_route_name = None
+
+            #Find all possible routes that start from the current end stop
             possible_routes = [
                 route_name for route_name, route_data in routes.items() if route_data["start"] == current_end
             ]
+
+            #Iterate over all possible routes and find the one with the most passengers waiting at all stops
             for route_name in possible_routes:
-                total_waiting = sum(len(bus_stop_queues[stop]) for stop in routes[route_name]["stops"])
+                total_waiting = sum(len(bus_stop_queues[stop]) for stop in routes[route_name]["stops"])  #Calculate total waiting passengers at all stops on the route
+                
                 if total_waiting > most_waiting:
                     most_waiting = total_waiting
                     next_route_name = route_name
-
-            if next_route_name:
-                current_route_name = next_route_name
-                current_route = routes[current_route_name]
-
-        elif strategy == "random":
-            #Random route switching
+        else:
+            #Random route selection strategy
             possible_routes = [
                 route_name for route_name, route_data in routes.items() if route_data["start"] == current_end
             ]
-            if possible_routes:
-                current_route_name = random.choice(possible_routes)
-                current_route = routes[current_route_name]
+            next_route_name = random.choice(possible_routes) if possible_routes else None
 
-#Running the simulation function
+        #Update the current route to the one chosen by the strategy
+        if next_route_name:
+            current_route_name = next_route_name
+            current_route = routes[current_route_name]
+            
+
+#Function to run simulations and log results
 def run_simulation(nb_values, num_runs, strategy):
     average_utilizations = []
-    standard_errors = []
+    average_travel_times = []
 
     for n_b in nb_values:
         utilization_records = []
+        travel_times = []
 
         for run in range(num_runs):
             env = simpy.Environment()
             bus_stop_queues = {stop: [] for route in routes.values() for stop in route["stops"]}
+            passenger_list = []
 
-            passenger_generator(env, bus_stop_queues)
+            #Start a passenger generator process for each bus stop
+            for stop in bus_stop_queues.keys():
+                env.process(passenger_generator(env, stop, bus_stop_queues, passenger_list))
 
+            #Start multiple buses
             utilization_record = []
             for i in range(n_b):
-                route_name = random.choice(list(routes.keys()))
-                env.process(bus(env, bus_stop_queues, route_name, utilization_record, strategy))
+                route = random.choice(list(routes.keys()))  #Select random start route for each bus
+                env.process(bus(env, bus_stop_queues, route, utilization_record, travel_times, strategy))
 
+            #Run the simulation
             env.run(until=SIMULATION_TIME)
             utilization_records.append(np.mean(utilization_record))
 
+        #Calculate average utilization
         avg_utilization = np.mean(utilization_records)
-        std_error = np.std(utilization_records) / np.sqrt(num_runs)
-
         average_utilizations.append(avg_utilization)
-        standard_errors.append(std_error)
 
-    return average_utilizations, standard_errors
+        #Calculate average travel time
+        avg_travel_time = np.mean(travel_times) if len(travel_times) > 0 else 0
+        average_travel_times.append(avg_travel_time)
 
-#Run simulations for both strategies
+    return average_utilizations, average_travel_times
+
 nb_values = [5, 7, 10, 15]
 num_runs = 15
+strategies = ["demand", "random"]
+results = {}
 
-#Demand-based strategy
-avg_util_demand, std_err_demand = run_simulation(nb_values, num_runs, strategy="demand_based")
-plt.errorbar(nb_values, avg_util_demand, yerr=std_err_demand, fmt='o-', capsize=5, label='Demand-Based Utilization')
+for strategy in strategies:
+    avg_utilizations, avg_travel_times = run_simulation(nb_values, num_runs, strategy)
+    results[strategy] = (avg_utilizations, avg_travel_times)
 
-#Random strategy
-avg_util_random, std_err_random = run_simulation(nb_values, num_runs, strategy="random")
-plt.errorbar(nb_values, avg_util_random, yerr=std_err_random, fmt='o-', capsize=5, label='Random Utilization')
+#Plotting average utilization for both strategies
+plt.figure(figsize=(10, 6))
+for strategy, (avg_utilizations, avg_travel_times) in results.items():
+    plt.plot(nb_values, avg_utilizations, marker='o', linestyle='-', label=f'{strategy.capitalize()} Utilization')
 
 plt.xlabel('Number of Buses ($n_b$)')
 plt.ylabel('Average Utilization')
 plt.title('Bus Utilization for Different Route Selection Strategies')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+#Plotting average travel time for both strategies
+plt.figure(figsize=(10, 6))
+for strategy, (avg_utilizations, avg_travel_times) in results.items():
+    plt.plot(nb_values, avg_travel_times, marker='o', linestyle='-', label=f'{strategy.capitalize()} Travel Time')
+
+plt.xlabel('Number of Buses ($n_b$)')
+plt.ylabel('Average Travel Time')
+plt.title('Average Travel Time for Different Route Selection Strategies')
 plt.grid(True)
 plt.legend()
 plt.show()
